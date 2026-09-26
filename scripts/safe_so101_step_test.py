@@ -8,6 +8,7 @@ position, then disables torque on every motor. Do not use it for task actions.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 import json
 import time
@@ -23,7 +24,7 @@ PORT = "/dev/cu.usbmodem5A7C1240491"
 CALIBRATION = Path("artifacts/calibration/so101_follower_kai_01/so101_follower_kai_01.json")
 STEP_COUNTS = 20  # approximately 1.8 degrees for a 4096-count encoder
 DEFAULT_SETTLE_S = 1.0
-MAX_SETTLE_S = 3.0
+MAX_SETTLE_S = 15.0
 
 
 def capture_camera_frame(camera_index: int, label: str) -> Path:
@@ -54,6 +55,17 @@ def main() -> None:
     ))
     parser.add_argument("--step-counts", type=int, default=STEP_COUNTS)
     parser.add_argument(
+        "--calibration-probe-40",
+        action="store_true",
+        help="Explicitly permit a one-joint calibration probe up to 40 counts; default safety limit remains 20",
+    )
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="Number of sequential bounded steps before returning to the measured start (1 to 3)",
+    )
+    parser.add_argument(
         "--camera-index",
         type=int,
         help="Optional OpenCV camera index; saves start/moved/returned evidence frames",
@@ -64,6 +76,11 @@ def main() -> None:
         help="Latch every joint at its current measured pose and keep torque enabled after a passing test",
     )
     parser.add_argument(
+        "--retain-target",
+        action="store_true",
+        help="Keep the single bounded target after a passing probe; requires --calibration-probe-40",
+    )
+    parser.add_argument(
         "--settle-s",
         type=float,
         default=DEFAULT_SETTLE_S,
@@ -72,8 +89,17 @@ def main() -> None:
     args = parser.parse_args()
     if not 0.1 <= args.settle_s <= MAX_SETTLE_S:
         parser.error(f"--settle-s must be between 0.1 and {MAX_SETTLE_S:g}")
+    if not 1 <= args.repeat <= 3:
+        parser.error("--repeat must be between 1 and 3")
+    if args.retain_target and not args.calibration_probe_40:
+        parser.error("--retain-target requires --calibration-probe-40")
     calibration = json.loads(CALIBRATION.read_text(encoding="utf-8"))
-    gate = SafetyGate(SafetyConfig.from_json(Path("configs/so101_safety.json")))
+    safety_config = SafetyConfig.from_json(Path("configs/so101_safety.json"))
+    if abs(args.step_counts) > safety_config.max_step_counts:
+        if not args.calibration_probe_40 or abs(args.step_counts) > 40:
+            parser.error("steps above the default safety limit require --calibration-probe-40 and may not exceed 40")
+        safety_config = replace(safety_config, max_step_counts=40)
+    gate = SafetyGate(safety_config)
     motors = {
         "shoulder_pan": Motor(1, "sts3215", MotorNormMode.DEGREES),
         "shoulder_lift": Motor(2, "sts3215", MotorNormMode.DEGREES),
@@ -95,8 +121,6 @@ def main() -> None:
         if invalid:
             raise RuntimeError(f"Refusing motion: outside calibrated bounds: {invalid}")
 
-        proposed = {args.joint: start[args.joint] + args.step_counts}
-        target = gate.validate_raw_joint_goals(start, proposed, timeout_s=3.0)[args.joint]
         frames: list[Path] = []
         if args.camera_index is not None:
             frames.append(capture_camera_frame(args.camera_index, f"{args.joint}_start"))
@@ -114,20 +138,35 @@ def main() -> None:
             bus.enable_torque(args.joint)
         time.sleep(args.settle_s)
 
-        bus.write("Goal_Position", args.joint, target, normalize=False)
-        time.sleep(args.settle_s)
-        moved = bus.read("Present_Position", args.joint, normalize=False, num_retry=2)
+        observed_steps: list[int] = []
+        current = start[args.joint]
+        target = current
+        for _ in range(args.repeat):
+            proposed = {args.joint: current + args.step_counts}
+            target = gate.validate_raw_joint_goals(
+                {args.joint: current}, proposed, timeout_s=3.0
+            )[args.joint]
+            bus.write("Goal_Position", args.joint, target, normalize=False)
+            time.sleep(args.settle_s)
+            current = bus.read("Present_Position", args.joint, normalize=False, num_retry=2)
+            observed_steps.append(current)
+        moved = observed_steps[-1]
         if args.camera_index is not None:
             frames.append(capture_camera_frame(args.camera_index, f"{args.joint}_moved"))
 
-        bus.write("Goal_Position", args.joint, start[args.joint], normalize=False)
-        time.sleep(args.settle_s)
-        returned = bus.read("Present_Position", args.joint, normalize=False, num_retry=2)
-        if args.camera_index is not None:
-            frames.append(capture_camera_frame(args.camera_index, f"{args.joint}_returned"))
+        if args.retain_target:
+            returned = moved
+            if args.camera_index is not None:
+                frames.append(capture_camera_frame(args.camera_index, f"{args.joint}_held"))
+        else:
+            bus.write("Goal_Position", args.joint, start[args.joint], normalize=False)
+            time.sleep(args.settle_s)
+            returned = bus.read("Present_Position", args.joint, normalize=False, num_retry=2)
+            if args.camera_index is not None:
+                frames.append(capture_camera_frame(args.camera_index, f"{args.joint}_returned"))
         print(
             f"PASS joint={args.joint} start={start[args.joint]} target={target} "
-            f"observed={moved} returned={returned}"
+            f"observed_steps={observed_steps} final={returned} retained_target={args.retain_target}"
         )
         for frame in frames:
             print(f"camera_frame={frame}")

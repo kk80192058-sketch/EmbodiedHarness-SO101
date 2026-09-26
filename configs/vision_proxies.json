@@ -9,6 +9,13 @@
     "minimum_area_px": 20,
     "role": "visual proxy for the gripper, not the physical jaw centre"
   },
+  "gripper_tool_proxy": {
+    "color": "dark",
+    "roi_px": [900, 360, 1080, 470],
+    "expected_center_px": [973.0, 407.0],
+    "minimum_area_px": 300,
+    "role": "dark feature on the wrist-distal end-effector structure; use template tracking for bounded-probe verification"
+  },
   "red_block": {
     "color": "red",
     "roi_px": [900, 600, 1200, 800],

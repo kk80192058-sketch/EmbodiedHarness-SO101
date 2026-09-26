@@ -44,7 +44,7 @@
 | 数据质量门控 | `harness/data_gate.py` | 干净轨迹与恢复轨迹的区分测试 |
 | 电机 Safety Gate | `harness/safety.py` | 硬/软限位与超时测试 |
 | SO-101 bring-up 工具 | `scripts/safe_so101_step_test.py`、`scripts/so101_hold_watchdog_test.py` | 仅在完成实体校准后使用 |
-| 视觉工作区工具 | `scripts/calibrate_tabletop_from_a4.py`、`scripts/detect_visual_proxies.py` | 本地、贴近硬件的标定工具 |
+| 视觉工作区工具 | `scripts/calibrate_tabletop_from_a4.py`、`scripts/detect_visual_proxies.py`、`scripts/track_gripper_star_template.py` | 本地、贴近硬件的标定工具；模板工具只验证二维视觉代理的可重复性 |
 
 ## 快速开始
 

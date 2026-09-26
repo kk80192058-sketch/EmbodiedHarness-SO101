@@ -18,6 +18,12 @@ def red_mask(image: np.ndarray) -> np.ndarray:
     return cv2.inRange(hsv, (0, 80, 35), (15, 255, 255)) | cv2.inRange(hsv, (165, 80, 35), (180, 255, 255))
 
 
+def dark_mask(image: np.ndarray) -> np.ndarray:
+    """Pick dark mechanical features against the light tabletop."""
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    return cv2.inRange(hsv, (0, 0, 0), (180, 255, 75))
+
+
 def detect(mask: np.ndarray, roi: list[int], minimum_area: int, expected: tuple[float, float] | None = None) -> dict[str, object]:
     left, top, right, bottom = roi
     cropped = mask[top:bottom, left:right]
@@ -47,10 +53,20 @@ def main() -> None:
         parser.error(f"cannot read {args.image}")
     config = json.loads(args.config.read_text(encoding="utf-8"))
     mask = red_mask(image)
-    star_config, block_config = config["gripper_star"], config["red_block"]
+    star_config, tool_config, block_config = (
+        config["gripper_star"],
+        config["gripper_tool_proxy"],
+        config["red_block"],
+    )
     result = {
         "image": str(args.image),
         "gripper_star": detect(mask, star_config["roi_px"], star_config["minimum_area_px"], tuple(star_config["expected_center_px"])),
+        "gripper_tool_proxy": detect(
+            dark_mask(image),
+            tool_config["roi_px"],
+            tool_config["minimum_area_px"],
+            tuple(tool_config["expected_center_px"]),
+        ),
         "red_block": detect(mask, block_config["roi_px"], block_config["minimum_area_px"]),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
