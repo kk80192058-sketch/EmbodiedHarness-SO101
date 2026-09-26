@@ -67,18 +67,29 @@ def main() -> None:
     for entry in entries:
         try:
             robot = [float(value) for value in entry["robot_tool_xy_mm"]]
-            pixel = [float(value) for value in entry["camera_px"]]
         except (KeyError, TypeError, ValueError) as error:
-            raise ValueError("each contact needs numeric robot_tool_xy_mm and camera_px pairs") from error
-        if len(robot) != 2 or len(pixel) != 2:
-            raise ValueError("contact coordinate pairs must each contain exactly two values")
-        board = board_point_from_pixel(homography, pixel)
+            raise ValueError("each contact needs a numeric robot_tool_xy_mm pair") from error
+        if len(robot) != 2:
+            raise ValueError("robot_tool_xy_mm must contain exactly two values")
+        if "board_xy_mm" in entry:
+            board = np.asarray(entry["board_xy_mm"], dtype=float)
+            if board.shape != (2,):
+                raise ValueError("board_xy_mm must contain exactly two values")
+            pixel = entry.get("camera_px")
+        else:
+            try:
+                pixel = [float(value) for value in entry["camera_px"]]
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError("each contact needs board_xy_mm or camera_px") from error
+            if len(pixel) != 2:
+                raise ValueError("camera_px must contain exactly two values")
+            board = board_point_from_pixel(homography, pixel)
         robot_points.append(robot)
         board_points.append(board.tolist())
         used.append({
             "name": str(entry.get("name", f"contact_{len(used) + 1}")),
             "robot_tool_xy_mm": [round(value, 3) for value in robot],
-            "camera_px": [round(value, 3) for value in pixel],
+            "camera_px": [round(float(value), 3) for value in pixel] if pixel is not None else None,
             "board_xy_mm": [round(float(value), 3) for value in board],
         })
     rotation, translation, rms = fit_rigid_transform(np.asarray(robot_points), np.asarray(board_points))
