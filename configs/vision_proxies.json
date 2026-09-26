@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "camera_index": 1,
+  "gripper_star": {
+    "color": "red",
+    "roi_px": [930, 340, 1010, 410],
+    "expected_center_px": [974.1, 375.8],
+    "minimum_area_px": 20,
+    "role": "visual proxy for the gripper, not the physical jaw centre"
+  },
+  "red_block": {
+    "color": "red",
+    "roi_px": [850, 450, 1250, 950],
+    "minimum_area_px": 150,
+    "role": "pick target detected inside the A4 workspace"
+  }
+}

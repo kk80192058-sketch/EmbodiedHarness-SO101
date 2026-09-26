@@ -1,0 +1,25 @@
+{
+  "robot_id": "so101_follower_kai_01",
+  "calibration_file": "artifacts/calibration/so101_follower_kai_01/so101_follower_kai_01.json",
+  "port": "/dev/cu.usbmodem5A7C1240491",
+  "action_timeout_s": 3.0,
+  "max_step_counts": 20,
+  "default_soft_margin_counts": 150,
+  "safe_home_tolerance_counts": 60,
+  "safe_home_raw": {
+    "shoulder_pan": 1976,
+    "shoulder_lift": 2058,
+    "elbow_flex": 2092,
+    "wrist_flex": 2146,
+    "wrist_roll": 2124,
+    "gripper": 2047
+  },
+  "joint_limits": {
+    "shoulder_pan": [745, 3443],
+    "shoulder_lift": [889, 3262],
+    "elbow_flex": [825, 3026],
+    "wrist_flex": [952, 3222],
+    "wrist_roll": [0, 4095],
+    "gripper": [1849, 3307]
+  }
+}
