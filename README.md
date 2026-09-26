@@ -45,6 +45,7 @@
 | 电机 Safety Gate | `harness/safety.py` | 硬/软限位与超时测试 |
 | SO-101 bring-up 工具 | `scripts/safe_so101_step_test.py`、`scripts/so101_hold_watchdog_test.py` | 仅在完成实体校准后使用 |
 | 视觉工作区工具 | `scripts/calibrate_tabletop_from_a4.py`、`scripts/detect_visual_proxies.py`、`scripts/track_gripper_star_template.py` | 本地、贴近硬件的标定工具；模板工具只验证二维视觉代理的可重复性 |
+| 基座对齐工具 | `scripts/calibrate_robot_base_from_contacts.py` | 由至少三个经确认的夹爪中心桌面接触点拟合刚体二维变换；残差不合格时拒绝使用 |
 
 ## 快速开始
 
@@ -73,7 +74,7 @@ python3 -m unittest discover -s tests -v
 
 ## 尚未完成的部分
 
-下一项硬件里程碑是末端视觉对齐，然后是在目标物上方的闭环、仅接近式运动。碰撞几何、
+下一项硬件里程碑是末端视觉对齐和基座-桌面关系标定，然后是在目标物上方的闭环、仅接近式运动。碰撞几何、
 三维工具位姿、力敏抓取和自主执行抓取仍必须经过额外验证；仓库不会将它们表述为已完成。
 
 ## 仓库卫生
