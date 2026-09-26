@@ -1,51 +1,46 @@
-# Agent Runtime: Hardware-Independent Slice
+# Agent 运行时：与硬件无关的切片
 
-This document describes the portion of EmbodiedHarness that can be developed
-and verified while no robot is connected.
+本文描述 EmbodiedHarness 中无需连接机器人也能开发和验证的部分。
 
-## Execution flow
+## 执行流程
 
 ```text
-task request
-  -> deterministic skill backend
-  -> append-only event trace
-  -> final-state evidence verifier
-  -> clean-data admission gate
+任务请求
+  -> 确定性技能后端
+  -> 只追加写入的事件轨迹
+  -> 最终状态证据验证器
+  -> 干净数据准入门
 ```
 
-`TaskAgent` executes the zero-demonstration `pick -> place` plan against the
-adapter contract. Every request, observation, result, and recovery decision is
-written to JSONL before the next decision is made.
+`TaskAgent` 依据适配器契约执行零示教的 `pick -> place` 计划。每个请求、观测、结果与
+恢复决策都会在进行下一次决策前写入 JSONL。
 
-## Failure policy
+## 失败策略
 
-| Failure | Agent response | Data-gate outcome |
+| 失败情形 | Agent 响应 | 数据门控结果 |
 | --- | --- | --- |
-| perception miss | one bounded retry | excluded if any attempt fails |
-| grasp fail | open gripper, then one bounded retry | excluded if any attempt fails |
-| place fail | one bounded retry | excluded if any attempt fails |
-| precondition/safety/unknown | abort | excluded |
+| 感知遗漏 | 一次有上界的重试 | 任何一次失败即排除 |
+| 抓取失败 | 打开夹爪后进行一次有上界的重试 | 任何一次失败即排除 |
+| 放置失败 | 一次有上界的重试 | 任何一次失败即排除 |
+| 前置条件/安全/未知错误 | 中止 | 排除 |
 
-The purpose of a recovery trace is diagnosis, not automatic self-training. A
-recovered episode may be useful to inspect, but it is not a clean policy
-example.
+恢复轨迹的目的在于诊断，而不是自动自我训练。经历恢复的 episode 可以用于人工检查，
+但不是干净的策略样本。
 
-## Acceptance invariant
+## 准入不变量
 
-An episode is eligible for self-improvement data only when all conditions hold:
+一条 episode 只有同时满足以下条件，才有资格进入自我改进数据：
 
-1. Its event sequences are contiguous and append-only.
-2. It has exactly one completion event.
-3. The final verifier proves that the requested object is released inside the
-   requested target and the gripper is open.
-4. No `skill_result` event reports failure.
+1. 事件序列连续且只追加写入。
+2. 恰好有一个完成事件。
+3. 最终验证器证明请求的物体已在目标范围内被释放，且夹爪为打开状态。
+4. 没有任何 `skill_result` 事件报告失败。
 
-The deterministic simulator tests all of these conditions, including successful
-execution, bounded recovery, and an unsafe/precondition abort.
+确定性仿真器会测试所有这些条件，包括成功执行、有界恢复，以及不安全/前置条件失败时
+的中止。
 
-## Explicitly deferred to SO-101 bring-up
+## 明确延后到 SO-101 bring-up 的内容
 
-The following are intentionally **not** claimed by this slice: camera-to-base
-extrinsics, 3D tool pose, collision geometry, force-sensitive grasping,
-hardware action execution, or learning from a real robot trace. They remain
-behind the SO-101 safety gate and require the physical calibration steps.
+本切片刻意**不宣称**已具备以下能力：相机到机器人底座的外参、三维工具位姿、碰撞几何、
+力敏抓取、真实硬件动作执行，或从真实机器人轨迹中学习。它们都位于 SO-101 安全门之后，
+需要完成实体标定步骤。

@@ -22,7 +22,8 @@ from harness.safety import SafetyConfig, SafetyGate
 PORT = "/dev/cu.usbmodem5A7C1240491"
 CALIBRATION = Path("artifacts/calibration/so101_follower_kai_01/so101_follower_kai_01.json")
 STEP_COUNTS = 20  # approximately 1.8 degrees for a 4096-count encoder
-SETTLE_S = 1.0
+DEFAULT_SETTLE_S = 1.0
+MAX_SETTLE_S = 3.0
 
 
 def capture_camera_frame(camera_index: int, label: str) -> Path:
@@ -62,7 +63,15 @@ def main() -> None:
         action="store_true",
         help="Latch every joint at its current measured pose and keep torque enabled after a passing test",
     )
+    parser.add_argument(
+        "--settle-s",
+        type=float,
+        default=DEFAULT_SETTLE_S,
+        help=f"Seconds to wait after each bounded command (0.1 to {MAX_SETTLE_S:g})",
+    )
     args = parser.parse_args()
+    if not 0.1 <= args.settle_s <= MAX_SETTLE_S:
+        parser.error(f"--settle-s must be between 0.1 and {MAX_SETTLE_S:g}")
     calibration = json.loads(CALIBRATION.read_text(encoding="utf-8"))
     gate = SafetyGate(SafetyConfig.from_json(Path("configs/so101_safety.json")))
     motors = {
@@ -103,16 +112,16 @@ def main() -> None:
             bus.disable_torque()
             bus.write("Goal_Position", args.joint, start[args.joint], normalize=False)
             bus.enable_torque(args.joint)
-        time.sleep(SETTLE_S)
+        time.sleep(args.settle_s)
 
         bus.write("Goal_Position", args.joint, target, normalize=False)
-        time.sleep(SETTLE_S)
+        time.sleep(args.settle_s)
         moved = bus.read("Present_Position", args.joint, normalize=False, num_retry=2)
         if args.camera_index is not None:
             frames.append(capture_camera_frame(args.camera_index, f"{args.joint}_moved"))
 
         bus.write("Goal_Position", args.joint, start[args.joint], normalize=False)
-        time.sleep(SETTLE_S)
+        time.sleep(args.settle_s)
         returned = bus.read("Present_Position", args.joint, normalize=False, num_retry=2)
         if args.camera_index is not None:
             frames.append(capture_camera_frame(args.camera_index, f"{args.joint}_returned"))
