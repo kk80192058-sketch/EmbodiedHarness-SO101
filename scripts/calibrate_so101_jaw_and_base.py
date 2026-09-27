@@ -7,9 +7,10 @@ jaws.  From four or more human-confirmed tabletop contacts, it jointly fits:
 * a fixed 3-D offset from the URDF gripper frame to the jaw centre; and
 * a rigid 2-D transform from robot base XY to A4 board XY.
 
-It is offline and never accesses motors or a camera.  A solution is rejected
-unless it has an independent residual check (four or more contacts) and meets
-the requested RMS bound.
+It is offline and never accesses motors or a camera. The printed board's Y-down
+convention is explicitly converted to a right-handed fitting frame. A CLI
+solution needs at least five contacts, leave-one-out validation and RMS/offset
+bounds. Low training residual alone is not independent validation.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from pathlib import Path
 import numpy as np
 
 from scripts.preview_so101_fk import forward_kinematics, parse_urdf, raw_to_degrees
+from scripts.calibrate_robot_base_from_contacts import board_basis
 
 
 def predict(parameters: np.ndarray, poses_mm: np.ndarray) -> np.ndarray:
@@ -95,6 +97,18 @@ def pose_for_sample(sample: dict, calibration: dict, urdf_joints: dict) -> np.nd
     return pose_mm
 
 
+def validate_held_out(poses: np.ndarray, right_handed_board: np.ndarray) -> list[float]:
+    if len(poses) < 5:
+        raise ValueError('at least five contacts are needed to fit four and hold one out')
+    errors = []
+    for held_out in range(len(poses)):
+        keep = [i for i in range(len(poses)) if i != held_out]
+        parameters, _, _ = fit_joint_alignment(poses[keep], right_handed_board[keep])
+        predicted = predict(parameters, poses[[held_out]])[0]
+        errors.append(float(np.linalg.norm(predicted - right_handed_board[held_out])))
+    return errors
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=Path, required=True, help="JSON list: {\"samples\": [\"sample.json\", ...]}")
@@ -102,41 +116,60 @@ def main() -> None:
     parser.add_argument("--urdf", type=Path, required=True)
     parser.add_argument("--max-rms-error-mm", type=float, default=3.0)
     parser.add_argument("--max-jaw-offset-mm", type=float, default=150.0)
+    parser.add_argument("--max-held-out-error-mm", type=float, default=5.0)
+    parser.add_argument("--board-y-axis", choices=('down', 'up'), default='down')
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     manifest = json.loads(args.samples.read_text(encoding="utf-8"))
     paths = [Path(item) for item in manifest.get("samples", [])]
-    if len(paths) < 4:
-        parser.error("sample manifest needs at least four contact sample paths")
+    if len(paths) < 5:
+        parser.error("sample manifest needs at least five contact sample paths for held-out validation")
+    if min(args.max_rms_error_mm, args.max_jaw_offset_mm, args.max_held_out_error_mm) <= 0:
+        parser.error('error and offset bounds must be positive')
     samples = [json.loads(path.read_text(encoding="utf-8")) for path in paths]
     calibration = json.loads(args.calibration.read_text(encoding="utf-8"))
     urdf_joints = parse_urdf(args.urdf)
     poses = np.asarray([pose_for_sample(sample, calibration, urdf_joints) for sample in samples])
     board = np.asarray([sample["board_xy_mm"] for sample in samples], dtype=float)
-    parameters, rms, iterations = fit_joint_alignment(poses, board)
+    basis = board_basis(args.board_y_axis)
+    fitting_board = board @ basis
+    parameters, rms, iterations = fit_joint_alignment(poses, fitting_board)
+    held_out_errors = validate_held_out(poses, fitting_board)
     theta, tx, ty, ox, oy, oz = parameters
     offset_norm = float(np.linalg.norm([ox, oy, oz]))
-    accepted = rms <= args.max_rms_error_mm and offset_norm <= args.max_jaw_offset_mm
+    accepted = (rms <= args.max_rms_error_mm and offset_norm <= args.max_jaw_offset_mm
+                and max(held_out_errors) <= args.max_held_out_error_mm)
+    rotation = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+    linear = basis @ rotation
+    translation = basis @ np.array([tx, ty])
+    predictions = predict(parameters, poses) @ basis
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "offline_joint_jaw_offset_and_base_alignment",
         "hardware_access": False,
         "sample_count": len(samples),
         "sample_names": [sample["name"] for sample in samples],
+        "board_y_axis": args.board_y_axis,
         "jaw_centre_offset_from_urdf_gripper_frame_mm": [round(float(value), 5) for value in (ox, oy, oz)],
         "jaw_offset_norm_mm": round(offset_norm, 5),
         "robot_xy_mm_to_board_xy_mm": {
-            "rotation_rad": round(float(theta), 9),
-            "translation_mm": [round(float(tx), 5), round(float(ty), 5)],
+            "linear_matrix": linear.round(9).tolist(),
+            "determinant": round(float(np.linalg.det(linear)), 6),
+            "translation_mm": translation.round(5).tolist(),
         },
         "fit_rms_error_mm": round(rms, 5),
+        "fit_rms_definition": "RMS per coordinate over the fitted XY residuals; not a held-out error",
+        "fit_point_errors_mm": np.linalg.norm(predictions - board, axis=1).round(5).tolist(),
+        "leave_one_out_errors_mm": [round(value, 5) for value in held_out_errors],
+        "maximum_accepted_held_out_error_mm": args.max_held_out_error_mm,
         "iterations": iterations,
         "maximum_accepted_rms_error_mm": args.max_rms_error_mm,
         "maximum_accepted_jaw_offset_mm": args.max_jaw_offset_mm,
         "accepted": accepted,
+        "motion_ready": False,
         "limits": [
             "Acceptance aligns the physical jaw centre to the board plane only.",
-            "It does not prove collision clearance, grasp force, or object height.",
+            "It does not prove collision clearance, grasp force, object height, or accuracy outside the sampled workspace.",
         ],
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

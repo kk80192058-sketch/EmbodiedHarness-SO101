@@ -1,0 +1,19 @@
+{
+  "repo_id": "nota-gmbh/so101_pick_place_smolvla",
+  "revision": "1c6badde8f3ddda0c546c4988a92c338ae74f22a",
+  "local_path": "artifacts/models/so101_pick_place_smolvla/1c6badde8f3ddda0c546c4988a92c338ae74f22a",
+  "vlm_local_path": "artifacts/models/smolvlm_processor/7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+  "device": "mps",
+  "body_units": "degrees",
+  "gripper_units": "range_0_100",
+  "camera_roles": {"fixed": "global", "handy": "wrist"},
+  "training_task": "pick_and_place",
+  "status": "shadow_verified_execution_not_validated",
+  "execution_enabled": false,
+  "adaptation_issues": [
+    "Current wrist_flex and gripper states exceed three training standard deviations",
+    "First predicted action exceeds single-joint 40-count limits",
+    "First predicted gripper target is outside configured soft limits",
+    "Original demonstration recording calibration and view correspondence remain unverified"
+  ]
+}

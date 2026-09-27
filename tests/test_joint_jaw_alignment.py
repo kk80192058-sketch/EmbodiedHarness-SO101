@@ -2,7 +2,8 @@ import unittest
 
 import numpy as np
 
-from scripts.calibrate_so101_jaw_and_base import fit_joint_alignment, predict
+from scripts.calibrate_so101_jaw_and_base import fit_joint_alignment, predict, validate_held_out
+from scripts.calibrate_robot_base_from_contacts import board_basis
 
 
 class JointJawAlignmentTests(unittest.TestCase):
@@ -26,3 +27,20 @@ class JointJawAlignmentTests(unittest.TestCase):
     def test_requires_four_contacts(self) -> None:
         with self.assertRaises(ValueError):
             fit_joint_alignment(np.zeros((3, 3, 4)), np.zeros((3, 2)))
+
+    def test_y_down_conversion_and_independent_predictions(self) -> None:
+        poses = []
+        for i, angle in enumerate([0., .5, -.8, 1.1, -1.4, .9]):
+            c, s = np.cos(angle), np.sin(angle)
+            poses.append([[c, -s, 0, i * i * 13.], [s, c, 0, i * 21.], [0, 0, 1, 120.]])
+        poses = np.asarray(poses)
+        parameters = np.array([.37, 41., -22., 14., -9., 26.])
+        printed = predict(parameters, poses) @ board_basis('down')
+        fitting = printed @ board_basis('down')
+        fitted, rms, _ = fit_joint_alignment(poses, fitting)
+        np.testing.assert_allclose(predict(fitted, poses) @ board_basis('down'), printed, atol=1e-5)
+        self.assertLess(max(validate_held_out(poses, fitting)), 1e-4)
+
+    def test_four_fitted_contacts_are_not_a_held_out_validation(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_held_out(np.zeros((4, 3, 4)), np.zeros((4, 2)))

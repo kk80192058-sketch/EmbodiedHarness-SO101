@@ -78,6 +78,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True, help="JSON calibration output")
     parser.add_argument("--review", type=Path, required=True, help="Annotated PNG output")
     parser.add_argument(
+        "--corners-reviewed", action="store_true",
+        help="Record explicit operator review of these exact four selected corners",
+    )
+    parser.add_argument(
+        "--print-scale-confirmed", action="store_true",
+        help="Record an actual physical 100 mm print-scale measurement",
+    )
+    parser.add_argument(
         "--orientation",
         choices=("upright", "rotated_90_cw", "rotated_180", "rotated_90_ccw"),
         required=True,
@@ -122,10 +130,14 @@ def main() -> None:
         },
         "homography_pixel_to_board_mm": homography.tolist(),
         "quality": {
-            "corner_selection": "operator-reviewed centres of printed L corners",
+            "corner_selection": ("operator-reviewed centres of printed L corners" if args.corners_reviewed
+                                 else "provided corners; operator review not recorded"),
             "max_corner_reprojection_error_mm": reprojection_error_mm,
             "edge_pixel_density_px_per_mm": density,
-            "print_scale_check": "100 mm confirmed by user",
+            "print_scale_check": ("100 mm confirmed by user" if args.print_scale_confirmed
+                                  else "physical print-scale measurement not recorded"),
+            "independent_accuracy_verified": False,
+            "reprojection_note": "Four fitted corners have near-zero residual by construction; this does not verify corner selection accuracy.",
         },
         "scope": {
             "complete": ["camera pixel to tabletop board millimetres"],
