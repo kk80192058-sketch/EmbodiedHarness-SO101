@@ -117,6 +117,7 @@ git diff --check
 `python -m scripts.capture_so101_contact_sample --confirm-jaw-centre`。采样会绑定当时的
 电机标定 JSON 与 URDF 的 SHA-256；审计器会拒绝声称采用这一 v2 采样格式、但来源文件
 缺失或内容已改变的样本。此确认和哈希只增强可追溯性，仍不等同于软件已验证实际接触。
+联合夹爪中心／基座拟合也会先运行同一份审计；未通过审计的样本不能进入几何拟合结果。
 
 ## 仓库卫生
 
