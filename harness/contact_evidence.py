@@ -26,6 +26,35 @@ def _resolve(root: Path, value: str) -> Path:
     return path if path.is_absolute() else root / path
 
 
+def _validate_captured_provenance(sample: dict[str, Any], root: Path, hashes: dict[str, str]) -> None:
+    """Validate the stricter v2 metadata emitted by the capture utility.
+
+    Legacy human-contact evidence predates this metadata, so it remains
+    auditable.  When a sample claims v2 capture provenance, however, its
+    calibration and URDF inputs must both be present and content-addressed.
+    """
+    provenance = sample.get('capture_provenance')
+    if provenance is None:
+        return
+    if not isinstance(provenance, dict) or provenance.get('schema_version') != 2:
+        raise ValueError('capture_provenance must use schema_version 2')
+    if provenance.get('operator_confirmed_jaw_centre') is not True:
+        raise ValueError('capture_provenance lacks operator jaw-centre confirmation')
+    if not isinstance(provenance.get('camera_index'), int) or provenance['camera_index'] < 0:
+        raise ValueError('capture_provenance camera_index must be a non-negative integer')
+    for source_name in ('calibration', 'urdf'):
+        source = provenance.get(source_name)
+        if not isinstance(source, dict) or not isinstance(source.get('path'), str) or not isinstance(source.get('sha256'), str):
+            raise ValueError(f'capture_provenance {source_name} needs path and sha256')
+        path = _resolve(root, source['path']).resolve()
+        if not path.is_file():
+            raise ValueError(f'capture_provenance {source_name} file is missing')
+        digest = _sha256(path)
+        if digest != source['sha256']:
+            raise ValueError(f'capture_provenance {source_name} sha256 mismatch')
+        hashes[str(path)] = digest
+
+
 def audit_contact_manifest(manifest_path: Path, *, root: Path = Path('.'), min_samples: int = 5) -> dict[str, Any]:
     """Read a manifest and return a deterministic, evidence-only audit.
 
@@ -84,6 +113,7 @@ def audit_contact_manifest(manifest_path: Path, *, root: Path = Path('.'), min_s
                 raise ValueError('raw encoder counts must cover every joint with integer 0..4095 values')
             if not evidence.is_file():
                 raise ValueError('camera evidence is missing')
+            _validate_captured_provenance(sample, root, result['source_sha256'])
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
             sample_result['error'] = str(error)
             result['errors'].append(f'{entry}: {error}')
