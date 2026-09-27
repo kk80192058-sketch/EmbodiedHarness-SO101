@@ -10,6 +10,7 @@ one camera frame as evidence, and writes a contact JSON snippet for
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +36,11 @@ def parse_pair(value: str) -> list[float]:
     if len(result) != 2:
         raise argparse.ArgumentTypeError("point must contain exactly X,Y")
     return result
+
+
+def sha256(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def make_bus() -> FeetechMotorsBus:
@@ -70,7 +76,15 @@ def main() -> None:
     parser.add_argument("--board-point-mm", required=True, type=parse_pair)
     parser.add_argument("--camera-index", type=int, default=1)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--confirm-jaw-centre",
+        action="store_true",
+        help="required acknowledgement that an operator physically placed the jaw centre at --board-point-mm",
+    )
     args = parser.parse_args()
+
+    if not args.confirm_jaw_centre:
+        parser.error("refusing capture without --confirm-jaw-centre; this tool cannot verify physical contact itself")
 
     calibration = json.loads(CALIBRATION.read_text(encoding="utf-8"))
     bus = make_bus()
@@ -93,7 +107,14 @@ def main() -> None:
         "raw_encoder_counts": raw,
         "gripper_frame_z_mm": round(float(pose[2, 3] * 1000), 3),
         "camera_evidence": str(image),
-        "measurement_note": "Operator must have placed the physical jaw centre at board_xy_mm before capture.",
+        "capture_provenance": {
+            "schema_version": 2,
+            "operator_confirmed_jaw_centre": True,
+            "camera_index": args.camera_index,
+            "calibration": {"path": str(CALIBRATION), "sha256": sha256(CALIBRATION)},
+            "urdf": {"path": str(URDF), "sha256": sha256(URDF)},
+        },
+        "measurement_note": "Operator confirmed the physical jaw centre at board_xy_mm before capture; the software records, but cannot independently prove, that placement.",
     }
     args.output.write_text(json.dumps(sample, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(sample, indent=2))
