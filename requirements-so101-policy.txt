@@ -1,0 +1,9 @@
+# Tested in the existing Python 3.12 environment; install with pip -r this file.
+# On this Mac, PIP_CERT=/etc/ssl/cert.pem uses the trusted system CA bundle.
+lerobot==0.6.1
+torch==2.11.0
+transformers==5.5.4
+accelerate==1.15.0
+num2words==0.5.14
+huggingface-hub==1.33.0
+safetensors==0.8.0

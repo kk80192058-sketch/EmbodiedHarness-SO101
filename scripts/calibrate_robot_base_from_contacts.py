@@ -47,12 +47,27 @@ def fit_rigid_transform(robot_points: np.ndarray, board_points: np.ndarray) -> t
     return rotation, translation, rms
 
 
+def board_basis(y_axis: str) -> np.ndarray:
+    """Printed X-right/Y-down with Z-up is not a right-handed XY basis."""
+    if y_axis not in ('down', 'up'):
+        raise ValueError('board Y axis must be down or up')
+    return np.diag([1.0, -1.0 if y_axis == 'down' else 1.0])
+
+
+def fit_board_transform(robot_points, board_points, y_axis='down'):
+    basis = board_basis(y_axis)
+    rotation, translation, rms = fit_rigid_transform(robot_points, board_points @ basis)
+    return basis @ rotation, basis @ translation, rms
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--table-calibration", type=Path, required=True)
     parser.add_argument("--contacts", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-rms-error-mm", type=float, default=3.0)
+    parser.add_argument("--board-y-axis", choices=('down', 'up'), default='down',
+                        help="Printed A4 uses Y down; use up only for an explicitly right-handed board frame")
     args = parser.parse_args()
     if args.max_rms_error_mm <= 0:
         parser.error("--max-rms-error-mm must be positive")
@@ -92,15 +107,17 @@ def main() -> None:
             "camera_px": [round(float(value), 3) for value in pixel] if pixel is not None else None,
             "board_xy_mm": [round(float(value), 3) for value in board],
         })
-    rotation, translation, rms = fit_rigid_transform(np.asarray(robot_points), np.asarray(board_points))
+    rotation, translation, rms = fit_board_transform(np.asarray(robot_points), np.asarray(board_points), args.board_y_axis)
     accepted = rms <= args.max_rms_error_mm
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "offline_contact_based_robot_base_alignment",
         "hardware_access": False,
         "contacts": used,
+        "board_y_axis": args.board_y_axis,
         "robot_xy_mm_to_board_xy_mm": {
-            "rotation": rotation.round(9).tolist(),
+            "linear_matrix": rotation.round(9).tolist(),
+            "determinant": round(float(np.linalg.det(rotation)), 6),
             "translation_mm": translation.round(6).tolist(),
         },
         "fit_rms_error_mm": round(rms, 4),

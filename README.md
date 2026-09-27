@@ -46,6 +46,10 @@
 | SO-101 bring-up 工具 | `scripts/safe_so101_step_test.py`、`scripts/so101_hold_watchdog_test.py` | 仅在完成实体校准后使用 |
 | 视觉工作区工具 | `scripts/calibrate_tabletop_from_a4.py`、`scripts/detect_visual_proxies.py`、`scripts/track_gripper_star_template.py` | 本地、贴近硬件的标定工具；模板工具只验证二维视觉代理的可重复性 |
 | 基座对齐工具 | `scripts/calibrate_robot_base_from_contacts.py` | 由至少三个经确认的夹爪中心桌面接触点拟合刚体二维变换；残差不合格时拒绝使用 |
+| 双相机 SO-101 会话 | `harness/so101_session.py`、`scripts/so101_session.py` | 持久串口连接下同步保存腕部/全局图、完整寄存器和时间戳；默认只读 |
+| SmolVLA 影子策略 | `harness/smolvla_policy.py`、`scripts/smolvla_shadow.py` | 固定修订、本地权重校验、双相机离线推理、单位转换和不可执行性报告；绝不直接写电机 |
+| 实体会话离线分析 | `harness/session_analysis.py`、`scripts/analyze_so101_sessions.py` | 按事件顺序严格配对每次写入、结果和相邻图像；错配或不完整区间不能进入局部响应估计 |
+| 策略就绪度报告 | `harness/so101_readiness.py`、`scripts/assess_so101_readiness.py` | 汇总状态、双相机新鲜度、目标唯一性与影子策略兼容性；只输出证据，永不授权电机动作 |
 
 ## 快速开始
 
@@ -54,12 +58,30 @@
 ```bash
 git clone <你的仓库地址>
 cd harness
+python3 -m pip install -e ".[test]"
 python3 -m scripts.run_sim_pick_place
 python3 -m unittest discover -s tests -v
 ```
 
 只有当最终状态验证和干净数据门控都通过时，仿真命令才会输出
 `accepted simulation episode`。
+
+SmolVLA 影子推理是一个单独的可选环境：`python3 -m pip install -e ".[so101-policy]"`。
+它依赖本地模型权重、已校准硬件和双相机保存证据；安装它不会启用或授权实体动作。
+
+## 开发与贡献
+
+GitHub Actions 会在 Python 3.11 和 3.12 上运行独立的仿真、标定、日志配对与安全契约测试。
+提交前可运行：
+
+```bash
+python3 -m unittest discover -s tests -v
+git diff --check
+```
+
+贡献规范见 [`CONTRIBUTING.md`](CONTRIBUTING.md)，安全问题请遵循
+[`SECURITY.md`](SECURITY.md) 的私密披露流程。仓库尚未选择开源许可证；在复用或分发前，
+请先取得维护者的明确许可。
 
 ## 安全边界
 
@@ -73,6 +95,16 @@ python3 -m unittest discover -s tests -v
 工具。
 
 ## 尚未完成的部分
+
+2026-09-27 实体接管状态、动作证据、A4 映射问题及下一步验收要求见
+[`docs/so101_resume_20260927.md`](docs/so101_resume_20260927.md)。受限动作入口
+`scripts/bounded_so101_hold_step.py` 缺省只读，并显式区分到位、滞住和保护停止；
+它尚不是完整的实体抓取后端。
+
+同日已经验证本地固定修订的 SmolVLA 可以对实际双相机证据完成影子推理，但它的首步
+夹爪提议超出已校准软范围，且现场腕部/夹爪状态偏离训练统计。策略输出因而只能作为
+诊断记录，不能自动升级为实体命令；完整结论与复跑命令见
+[`docs/so101_policy_integration.md`](docs/so101_policy_integration.md)。
 
 下一项硬件里程碑是末端视觉对齐和基座-桌面关系标定，然后是在目标物上方的闭环、仅接近式运动。碰撞几何、
 三维工具位姿、力敏抓取和自主执行抓取仍必须经过额外验证；仓库不会将它们表述为已完成。

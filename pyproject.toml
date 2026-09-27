@@ -8,5 +8,25 @@ version = "0.1.0"
 description = "Evidence-gated runtime contracts for zero-demonstration manipulation."
 requires-python = ">=3.11"
 
+[project.optional-dependencies]
+# The deterministic simulator, calibration checks, and safety contracts run
+# without robot hardware. Keep their CI dependency set small and portable.
+test = [
+  "numpy>=1.26",
+  "opencv-python-headless>=4.8",
+]
+# Install this separately only when running local SmolVLA shadow inference.
+# It intentionally remains out of the default/CI install because it includes
+# platform-specific ML runtimes and never grants hardware execution.
+so101-policy = [
+  "lerobot==0.6.1",
+  "torch==2.11.0",
+  "transformers==5.5.4",
+  "accelerate==1.15.0",
+  "num2words==0.5.14",
+  "huggingface-hub==1.33.0",
+  "safetensors==0.8.0",
+]
+
 [tool.setuptools.packages.find]
 include = ["harness*"]
