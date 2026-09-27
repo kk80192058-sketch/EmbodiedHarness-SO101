@@ -1,9 +1,13 @@
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
 import numpy as np
 
-from scripts.calibrate_so101_jaw_and_base import fit_joint_alignment, predict, validate_held_out
+from scripts.calibrate_so101_jaw_and_base import fit_joint_alignment, load_audited_samples, predict, validate_held_out
 from scripts.calibrate_robot_base_from_contacts import board_basis
+from harness.contact_evidence import JOINTS
 
 
 class JointJawAlignmentTests(unittest.TestCase):
@@ -44,3 +48,25 @@ class JointJawAlignmentTests(unittest.TestCase):
     def test_four_fitted_contacts_are_not_a_held_out_validation(self) -> None:
         with self.assertRaises(ValueError):
             validate_held_out(np.zeros((4, 3, 4)), np.zeros((4, 2)))
+
+    def test_loader_requires_audited_contact_evidence_before_fitting(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = []
+            for index in range(5):
+                image = root / f'{index}.png'
+                image.write_bytes(b'image')
+                sample = root / f'{index}.json'
+                sample.write_text(json.dumps({
+                    'name': f'p{index}', 'board_xy_mm': [float(index), 0.0],
+                    'raw_encoder_counts': dict.fromkeys(JOINTS, 2000), 'camera_evidence': str(image),
+                }))
+                paths.append(sample)
+            manifest = root / 'samples.json'
+            manifest.write_text(json.dumps({'samples': [str(path) for path in paths]}))
+            samples, audit = load_audited_samples(manifest)
+            self.assertEqual(len(samples), 5)
+            self.assertTrue(audit['accepted'])
+            paths[0].unlink()
+            with self.assertRaisesRegex(ValueError, 'contact evidence audit failed'):
+                load_audited_samples(manifest)

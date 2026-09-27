@@ -23,6 +23,7 @@ import numpy as np
 
 from scripts.preview_so101_fk import forward_kinematics, parse_urdf, raw_to_degrees
 from scripts.calibrate_robot_base_from_contacts import board_basis
+from harness.contact_evidence import audit_contact_manifest
 
 
 def predict(parameters: np.ndarray, poses_mm: np.ndarray) -> np.ndarray:
@@ -109,6 +110,20 @@ def validate_held_out(poses: np.ndarray, right_handed_board: np.ndarray) -> list
     return errors
 
 
+def load_audited_samples(manifest_path: Path) -> tuple[list[dict], dict]:
+    """Load sample JSON only after their evidence manifest passes its audit.
+
+    This validates files and recorded provenance, not the physical truth of an
+    operator's placement.  It prevents malformed or tampered samples from
+    silently producing a seemingly precise geometric fit.
+    """
+    audit = audit_contact_manifest(manifest_path, min_samples=5)
+    if not audit['accepted']:
+        raise ValueError('contact evidence audit failed: ' + '; '.join(audit['errors']))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return [json.loads(Path(item).read_text(encoding="utf-8")) for item in manifest['samples']], audit
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=Path, required=True, help="JSON list: {\"samples\": [\"sample.json\", ...]}")
@@ -120,13 +135,12 @@ def main() -> None:
     parser.add_argument("--board-y-axis", choices=('down', 'up'), default='down')
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    manifest = json.loads(args.samples.read_text(encoding="utf-8"))
-    paths = [Path(item) for item in manifest.get("samples", [])]
-    if len(paths) < 5:
-        parser.error("sample manifest needs at least five contact sample paths for held-out validation")
     if min(args.max_rms_error_mm, args.max_jaw_offset_mm, args.max_held_out_error_mm) <= 0:
         parser.error('error and offset bounds must be positive')
-    samples = [json.loads(path.read_text(encoding="utf-8")) for path in paths]
+    try:
+        samples, audit = load_audited_samples(args.samples)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        parser.error(str(error))
     calibration = json.loads(args.calibration.read_text(encoding="utf-8"))
     urdf_joints = parse_urdf(args.urdf)
     poses = np.asarray([pose_for_sample(sample, calibration, urdf_joints) for sample in samples])
@@ -149,6 +163,8 @@ def main() -> None:
         "hardware_access": False,
         "sample_count": len(samples),
         "sample_names": [sample["name"] for sample in samples],
+        "contact_evidence_sha256": audit['source_sha256'],
+        "contact_evidence_audit_mode": audit['mode'],
         "board_y_axis": args.board_y_axis,
         "jaw_centre_offset_from_urdf_gripper_frame_mm": [round(float(value), 5) for value in (ox, oy, oz)],
         "jaw_offset_norm_mm": round(offset_norm, 5),
