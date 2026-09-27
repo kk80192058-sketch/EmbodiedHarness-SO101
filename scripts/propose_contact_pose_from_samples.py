@@ -16,6 +16,8 @@ from pathlib import Path
 
 import numpy as np
 
+from harness.contact_evidence import audit_contact_manifest
+
 
 JOINTS = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper")
 
@@ -57,16 +59,28 @@ def select_triangle(points: np.ndarray, target: np.ndarray) -> tuple[tuple[int, 
     return indices, weights
 
 
+def load_audited_samples(manifest_path: Path) -> tuple[list[dict], dict]:
+    """Load interpolation inputs only after the contact-evidence audit passes.
+
+    This establishes saved-input integrity, not a clearance or motion claim.
+    """
+    audit = audit_contact_manifest(manifest_path, min_samples=3)
+    if not audit["accepted"]:
+        raise ValueError("contact evidence audit failed: " + "; ".join(audit["errors"]))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return [json.loads(Path(path).read_text(encoding="utf-8")) for path in manifest["samples"]], audit
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=Path, required=True)
     parser.add_argument("--target-board-mm", type=parse_pair, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    manifest = json.loads(args.samples.read_text(encoding="utf-8"))
-    samples = [json.loads(Path(path).read_text(encoding="utf-8")) for path in manifest["samples"]]
-    if len(samples) < 3:
-        parser.error("at least three contact samples are required")
+    try:
+        samples, audit = load_audited_samples(args.samples)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        parser.error(str(error))
     points = np.asarray([sample["board_xy_mm"] for sample in samples], dtype=float)
     raw = np.asarray([[sample["raw_encoder_counts"][joint] for joint in JOINTS] for sample in samples], dtype=float)
     indices, weights = select_triangle(points, args.target_board_mm)
@@ -75,6 +89,8 @@ def main() -> None:
         "schema_version": 1,
         "mode": "offline_empirical_contact_pose_proposal",
         "hardware_access": False,
+        "contact_evidence_sha256": audit["source_sha256"],
+        "contact_evidence_audit_mode": audit["mode"],
         "target_board_mm": args.target_board_mm.round(4).tolist(),
         "triangle_samples": [samples[index]["name"] for index in indices],
         "barycentric_weights": weights.round(6).tolist(),
