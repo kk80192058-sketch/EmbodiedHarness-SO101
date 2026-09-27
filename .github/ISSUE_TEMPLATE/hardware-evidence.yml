@@ -1,0 +1,40 @@
+name: Hardware evidence or calibration gap
+description: Track a physical validation gap without treating it as proof of a successful robot action.
+title: "hardware: "
+labels: [hardware, evidence]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This template is for evidence and calibration work. Do not attach serial
+        logs, camera captures, personally identifiable workspace imagery, or
+        material that enables an unsafe hardware bypass. Report vulnerabilities
+        privately via SECURITY.md.
+  - type: textarea
+    id: objective
+    attributes:
+      label: Physical objective and safety boundary
+      description: State the desired validation outcome and the actions that must remain prohibited.
+    validations:
+      required: true
+  - type: textarea
+    id: existing-evidence
+    attributes:
+      label: Existing evidence
+      description: Summarize saved observation IDs, calibration versions, and independent checks. Do not include ignored artifacts directly.
+    validations:
+      required: true
+  - type: textarea
+    id: missing-proof
+    attributes:
+      label: Missing proof or failed gate
+      description: Identify the exact acceptance criterion that is not currently met.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-collection
+    attributes:
+      label: Proposed evidence collection
+      description: Describe a read-only or bounded procedure, including stop conditions and what would make the result inconclusive.
+    validations:
+      required: true
