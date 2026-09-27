@@ -15,6 +15,33 @@ import time
 from harness.so101_step import NAMES
 
 
+def evidence_manifest(observation_path, record):
+    """Hash the exact saved observation and camera frames used by a prediction.
+
+    Prediction receipts are diagnostic evidence, not commands. Binding them to
+    content hashes prevents a later analysis from accidentally treating a
+    different frame at the same path as the policy input.
+    """
+    observation_path = Path(observation_path).resolve()
+    if not observation_path.is_file():
+        raise ValueError('Saved observation JSON is missing')
+    cameras = record.get('cameras')
+    if not isinstance(cameras, dict):
+        raise ValueError('Observation has no camera metadata')
+    frames = {}
+    for role in ('wrist', 'global'):
+        metadata = cameras.get(role)
+        path = Path(metadata['path']).resolve() if isinstance(metadata, dict) and 'path' in metadata else None
+        if path is None or not path.is_file():
+            raise ValueError(f'Observation is missing saved {role} frame')
+        with path.open('rb') as stream:
+            frames[role] = {'path': str(path), 'sha256': hashlib.file_digest(stream, 'sha256').hexdigest()}
+    with observation_path.open('rb') as stream:
+        observation_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
+    return {'observation_json': {'path': str(observation_path), 'sha256': observation_hash},
+            'camera_frames': frames}
+
+
 def raw_to_policy(raw, calibration, *, body_units):
     if body_units not in ('degrees', 'range_m100_100'):
         raise ValueError('Specify checkpoint body units explicitly')
