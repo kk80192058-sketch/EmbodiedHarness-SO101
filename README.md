@@ -52,6 +52,7 @@
 | SmolVLA 影子策略 | `harness/smolvla_policy.py`、`scripts/smolvla_shadow.py` | 固定修订、本地权重校验、双相机离线推理、单位转换和不可执行性报告；绝不直接写电机 |
 | 实体会话离线分析 | `harness/session_analysis.py`、`scripts/analyze_so101_sessions.py` | 按事件顺序严格配对每次写入、结果和相邻图像；错配或不完整区间不能进入局部响应估计 |
 | 策略就绪度报告 | `harness/so101_readiness.py`、`scripts/assess_so101_readiness.py` | 汇总状态、双相机新鲜度、目标唯一性与影子策略兼容性；只输出证据，永不授权电机动作 |
+| 接触样本证据审计 | `harness/contact_evidence.py`、`scripts/audit_so101_contact_evidence.py` | 校验人工接触样本及其相机证据，并输出输入内容哈希；不把完整性审计误作实体标定成功 |
 
 ## 快速开始
 
