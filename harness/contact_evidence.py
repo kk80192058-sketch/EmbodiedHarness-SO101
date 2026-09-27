@@ -30,14 +30,14 @@ def _validate_captured_provenance(sample: dict[str, Any], root: Path, hashes: di
     """Validate the stricter v2 metadata emitted by the capture utility.
 
     Legacy human-contact evidence predates this metadata, so it remains
-    auditable.  When a sample claims v2 capture provenance, however, its
-    calibration and URDF inputs must both be present and content-addressed.
+    auditable.  V2 adds content-addressed calibration/URDF inputs; V3 also
+    requires the stable hardware-telemetry receipt emitted at capture time.
     """
     provenance = sample.get('capture_provenance')
     if provenance is None:
         return
-    if not isinstance(provenance, dict) or provenance.get('schema_version') != 2:
-        raise ValueError('capture_provenance must use schema_version 2')
+    if not isinstance(provenance, dict) or provenance.get('schema_version') not in (2, 3):
+        raise ValueError('capture_provenance must use schema_version 2 or 3')
     if provenance.get('operator_confirmed_jaw_centre') is not True:
         raise ValueError('capture_provenance lacks operator jaw-centre confirmation')
     if not isinstance(provenance.get('camera_index'), int) or provenance['camera_index'] < 0:
@@ -53,6 +53,23 @@ def _validate_captured_provenance(sample: dict[str, Any], root: Path, hashes: di
         if digest != source['sha256']:
             raise ValueError(f'capture_provenance {source_name} sha256 mismatch')
         hashes[str(path)] = digest
+    if provenance['schema_version'] == 3:
+        telemetry = sample.get('hardware_telemetry')
+        if not isinstance(telemetry, dict):
+            raise ValueError('v3 capture needs hardware_telemetry')
+        registers = telemetry.get('registers')
+        deltas = telemetry.get('inter_read_position_delta_counts')
+        limit = telemetry.get('max_accepted_settle_delta_counts')
+        if not isinstance(registers, dict) or not isinstance(deltas, dict) or type(limit) is not int or limit < 0:
+            raise ValueError('v3 capture has invalid hardware_telemetry receipt')
+        required = ('Present_Position', 'Torque_Enable', 'Present_Load', 'Present_Temperature', 'Status')
+        if any(set(registers.get(register, ())) != set(JOINTS) for register in required):
+            raise ValueError('v3 capture telemetry is incomplete')
+        raw = sample.get('raw_encoder_counts')
+        if registers['Present_Position'] != raw:
+            raise ValueError('v3 capture telemetry position does not match raw encoders')
+        if set(deltas) != set(JOINTS) or any(type(value) is not int or abs(value) > limit for value in deltas.values()):
+            raise ValueError('v3 capture telemetry has invalid settle deltas')
 
 
 def audit_contact_manifest(manifest_path: Path, *, root: Path = Path('.'), min_samples: int = 5) -> dict[str, Any]:
