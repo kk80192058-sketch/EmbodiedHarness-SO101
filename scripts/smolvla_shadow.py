@@ -16,12 +16,13 @@ def main():
     parser.add_argument('--runs', type=int, default=2)
     args = parser.parse_args()
     import cv2
-    from harness.smolvla_policy import SmolVLAShadowPolicy, assess_proposal
+    from harness.smolvla_policy import SmolVLAShadowPolicy, assess_proposal, evidence_manifest
     from harness.safety import SafetyConfig
     output = Path('artifacts/policy_shadow') / str(time.time_ns())
     output.mkdir(parents=True, exist_ok=False)
     print('evidence_dir=' + str(output.resolve()), flush=True)
     record = json.loads(args.observation.read_text())
+    source_evidence = evidence_manifest(args.observation, record)
     config = json.loads(Path('configs/so101_safety.json').read_text())
     calibration = json.loads(Path(config['calibration_file']).read_text())
     images = {role: cv2.imread(meta['path']) for role, meta in record['cameras'].items()}
@@ -33,7 +34,7 @@ def main():
             result = policy.predict(record, images, calibration, args.task, seed=seed)
             result['execution_assessment'] = assess_proposal(
                 result, record, calibration, SafetyConfig.from_json(Path('configs/so101_safety.json')))
-            result['source_observation'] = str(args.observation.resolve())
+            result['source_evidence'] = source_evidence
             (output / f'prediction_{seed}.json').write_text(json.dumps(result, indent=2) + '\n')
             print(json.dumps({k: result[k] for k in ('inference_s', 'state', 'normalized_state')}), flush=True)
             print('first_proposal=' + json.dumps(result['raw_proposals'][0]), flush=True)

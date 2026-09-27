@@ -1,9 +1,10 @@
 import json
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 
-from harness.smolvla_policy import raw_to_policy, policy_to_raw, assess_proposal
+from harness.smolvla_policy import raw_to_policy, policy_to_raw, assess_proposal, evidence_manifest
 from harness.so101_step import NAMES
 from harness.safety import SafetyConfig
 
@@ -48,6 +49,22 @@ class PolicyContractTests(unittest.TestCase):
         self.assertFalse(report['hardware_execution_permitted'])
         self.assertEqual(report['out_of_distribution_joints'], ['wrist_flex', 'gripper'])
         self.assertTrue(all(not v['within_step_gate'] for v in report['joint_checks'].values()))
+
+    def test_evidence_manifest_binds_json_and_both_saved_camera_frames(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wrist, global_frame = root / 'wrist.png', root / 'global.png'
+            wrist.write_bytes(b'wrist-image'); global_frame.write_bytes(b'global-image')
+            observation = root / 'observation.json'
+            record = {'cameras': {'wrist': {'path': str(wrist)}, 'global': {'path': str(global_frame)}}}
+            observation.write_text(json.dumps(record))
+            manifest = evidence_manifest(observation, record)
+            self.assertEqual(manifest['observation_json']['path'], str(observation.resolve()))
+            self.assertNotEqual(manifest['camera_frames']['wrist']['sha256'],
+                                manifest['camera_frames']['global']['sha256'])
+            wrist.unlink()
+            with self.assertRaisesRegex(ValueError, 'wrist'):
+                evidence_manifest(observation, record)
 
 
 if __name__ == '__main__':
