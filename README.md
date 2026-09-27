@@ -1,5 +1,7 @@
 # EmbodiedHarness × SO-101
 
+[![CI](https://github.com/kk80192058-sketch/EmbodiedHarness-SO101/actions/workflows/ci.yml/badge.svg)](https://github.com/kk80192058-sketch/EmbodiedHarness-SO101/actions/workflows/ci.yml)
+
 一个带有**证据门控（evidence-gated）**机制、与具体模型无关的运行时，用于探索
 **零示教桌面操作**。项目将高层任务推理与真实硬件执行解耦，使每一条真实动作都受到
 边界约束、被完整记录，并可由独立证据复核。
