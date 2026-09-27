@@ -53,6 +53,7 @@
 | 实体会话离线分析 | `harness/session_analysis.py`、`scripts/analyze_so101_sessions.py` | 按事件顺序严格配对每次写入、结果和相邻图像；错配或不完整区间不能进入局部响应估计 |
 | 策略就绪度报告 | `harness/so101_readiness.py`、`scripts/assess_so101_readiness.py` | 汇总状态、双相机新鲜度、目标唯一性与影子策略兼容性；只输出证据，永不授权电机动作 |
 | 接触样本证据审计 | `harness/contact_evidence.py`、`scripts/audit_so101_contact_evidence.py` | 校验人工接触样本及其相机证据，并输出输入内容哈希；不把完整性审计误作实体标定成功 |
+| 接触姿态覆盖诊断 | `harness/contact_coverage.py`、`scripts/assess_so101_contact_coverage.py` | 将保存的当前关节状态与审计过的接触样本逐关节比较；包络外的姿态不得被表述为已观测接触姿态 |
 
 ## 快速开始
 
